@@ -7,6 +7,7 @@ from PyQt5.QtCore import Qt, QTimer
 from scipy.optimize import minimize, LinearConstraint, NonlinearConstraint
 import os
 from pinocchio.visualize import MeshcatVisualizer
+import time
 
 # Load the robot model
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -66,8 +67,9 @@ class VelocityIKController(QWidget):
         self.pressed_keys = set()
         self.timer = QTimer()
         self.timer.timeout.connect(self.control_loop)
-        self.timer.start(int(dt * 1000))
-
+        self.timer.start(int(dt * 100))             # Timeout every 5 ms instead of 50ms
+        self.prev_theta_dot = np.zeros(model.nv)
+        
     def keyPressEvent(self, event):
         self.pressed_keys.add(event.key())
 
@@ -139,17 +141,22 @@ class VelocityIKController(QWidget):
             )
 
             # Solve the optimization problem
+            start = time.perf_counter()
             result = minimize(
                 objective,
-                x0=np.zeros(model.nv),
+                x0=self.prev_theta_dot,
                 constraints=[linear_constraints, nonlinear_constraints],
-                method='SLSQP'
+                method='SLSQP',
+                # options={"maxiter": 10}
             )
+            end = time.perf_counter()
 
+            # print(f"Optimization time: {end - start:.3f} s")
             if result.success:
                 theta_dot = result.x
+                self.prev_theta_dot = theta_dot
                 q = pin.integrate(model, q, theta_dot * dt)
-                print(q)
+                # print(q)
                 viz.display(q)
 
 if __name__ == "__main__":
